@@ -218,7 +218,6 @@ namespace sim{
 		for( size_t i = 0; i < atoms.size(); i++ ){
 			atoms[i]->speed *= sqrt( ( 3 * ( atoms.size() - 1 ) * ctx.T ) / *kinetic_energy );
 		}
-		//std::cout<<atoms[0]->speed.length()<<std::endl;
 	}
 
 	void reduce_momentum( math::vector momentum ){
