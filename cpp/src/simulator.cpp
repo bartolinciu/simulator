@@ -1,12 +1,14 @@
-#include "simulator.h"
-#include <vector>
-#include <map>
-#include <string>
 #include <cstdio>
+#include <gmpxx.h> 
 #include <iostream>
 #include <iomanip>
-#include <gmpxx.h> 
+#include <map>
+#include "simulator.h"
+#include <string>
 #include <thread>
+#include <vector>
+
+
 
 std::vector<sim::atom*> atoms;
 std::map<std::string, mpf_class> scale;
@@ -34,10 +36,15 @@ namespace sim{
 	std::map<std::string, type_t*> types;
 	Context ctx;
 
-	void init( mpf_class molar_mass, mpf_class temperature, mpf_class dt, int thread_count ){
+	bool init( mpf_class mass_number, mpf_class temperature, mpf_class dt, int thread_count ){
 		mpf_set_default_prec(PRECISION);
+		
 
 		FILE* f = fopen( "sim.ini", "rt" );
+		if( f == NULL ){
+			printf("error: couldn't open configuration file for reading\n");
+			return false;
+		}
 		int n;
 
 		fscanf( f, "%i\n", &n );
@@ -56,44 +63,53 @@ namespace sim{
 			fgetc(f);
 		}
 
+
 		char ID1[6]={0};
 		char ID2[6]={0};
 		char value[9] = {0};
-		fgetc(f);
+
 
 		while( !feof( f ) ){
 			fread( ID1, 1, 5, f );
 			fread( ID2, 1, 5, f );
 			fread( value, 1, 8, f );
+			char *stripped_value = value;
+			while( stripped_value[0] == ' ' )
+				stripped_value += 1;
 			type_t *type1 = types[ std::string(ID1) ];
 			type_t *type2 = types[ std::string(ID2) ];
-			type1->sigmas[ type2 ] = mpf_class(value);
-			type2->sigmas[ type1 ] = mpf_class(value);
+
+			type1->sigmas[ type2 ] = mpf_class(stripped_value);
+			type2->sigmas[ type1 ] = mpf_class(stripped_value);
+			
 			fgetc(f);
 		}
+		
+
 
 		ctx.R = 8.314459848;
 		ctx.k = 1;
-		ctx.Epsilon = 1;
+		ctx.Epsilon = 1.5;
 		ctx.Sigma = 1;
-		ctx.M = molar_mass * 1000;
 		ctx.thread_count = thread_count;
 
 		scale[ "Length" ] = 0.375 * _pow(0.1, 9);
-		scale["Energy"] = 72.953E-23;
-		scale["Mass"] = 1.66053892173E-27 * molar_mass;
+		scale["Energy"] = 72.953E-23 * 1.5;
+		scale["Mass"] = 1.66053892173E-27 * mass_number;
 		scale["k"] = 1.3806485279E-23;
 		scale["Speed"] = sqrt( scale["Energy"]/scale["Mass"]);
 		scale["Temperature"] = scale["Energy"] / scale["k"];
 		scale["Time"] = scale["Length"] * sqrt( scale["Mass"]  / scale["Energy"]  );
 		ctx.T = temperature / scale["Temperature"];
 		ctx.dt = (dt * _pow( 0.1, 12 )) / scale["Time"];
+		return true;
 	}
 
 	void clear(){
 		for( auto t : types ){
-
+			delete t.second;
 		}
+		types.clear();
 	}
 
 	void read( char * fname ){
@@ -142,9 +158,9 @@ namespace sim{
 			insert( new atom( math::point( pos_x, pos_y, pos_z ), math::vector( speed_x, speed_y, speed_z ), type ) );
 		}
 		
-		char size_x[9];
-		char size_y[9];
-		char size_z[9];
+		char size_x[10]={0};
+		char size_y[10]={0};
+		char size_z[10]={0};
 
 		fscanf( f, "%s %s %s\n", size_x, size_y, size_z );
 		ctx.box_size = math::point( mpf_class(size_x), mpf_class(size_y), mpf_class(size_z) );
@@ -190,7 +206,7 @@ namespace sim{
 		if( cmp(length, 1.5) > 0 ){
 			return ::v0;
 		}
-		math::vector f = (r * 24 * ( 2 * _pow( sigma/length, 12) - _pow( sigma/length, 6) ))/(length*length);
+		math::vector f = (r * 24 * 1.5 * ( 2 * _pow( sigma/length, 12) - _pow( sigma/length, 6) ))/(length*length);
 
 		return f;
 	}
@@ -218,7 +234,6 @@ namespace sim{
 		for( size_t i = 0; i < atoms.size(); i++ ){
 			atoms[i]->speed *= sqrt( ( 3 * ( atoms.size() - 1 ) * ctx.T ) / *kinetic_energy );
 		}
-		//std::cout<<atoms[0]->speed.length()<<std::endl;
 	}
 
 	void reduce_momentum( math::vector momentum ){
@@ -291,6 +306,20 @@ namespace sim{
 		fclose(f);
 	}
 
+	void dump( FILE *f ){
+		if( f == NULL )
+			return;
+
+		fprintf( f, "Simulation\n%lu\n", atoms.size() );
+		for( size_t i = 0; i < atoms.size(); i++ ){			
+			fprintf( f, "%5lu ATOM%5s%5lu%8.3f%8.3f%8.3f%8.4f%8.4f%8.4f\n", i, atoms[i]->type->id, i, atoms[i]->position.x.get_d(), atoms[i]->position.y.get_d(), atoms[i]->position.z.get_d(),
+																					 atoms[i]->speed.x.get_d(), atoms[i]->speed.y.get_d(), atoms[i]->speed.z.get_d() );
+		}
+		fprintf( f, "%f %f %f\n", ctx.box_size.x.get_d(), ctx.box_size.y.get_d(), ctx.box_size.z.get_d() );
+	}
+
+
+
 	atom::atom( math::point position, math::vector speed, type_t *type ){
 		this->position = position;
 		this->speed = speed;
@@ -300,7 +329,11 @@ namespace sim{
 
 	void atom::update_position( mpf_class dt ){
 		math::vector a = this->resultant / this->type->mass;
-		this->position += this->speed * dt + a * _pow( dt, 2 ) * 0.5;
+		math::vector dr = this->speed * dt + a * _pow( dt, 2 ) * 0.5;
+		if( cmp(abs(dr.x), ctx.box_size.x) > 0 || cmp(abs(dr.y), ctx.box_size.y) > 0 || cmp(abs(dr.z), ctx.box_size.z) > 0 ){
+			printf("error: particle skipped the box\n");
+		}
+		this->position += dr;
 
 		if( cmp( this->position.x, 0.0) < 0 ){
 			this->position.x = ctx.box_size.x + this->position.x % ctx.box_size.x;

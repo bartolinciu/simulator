@@ -153,6 +153,10 @@ namespace sim{
 			return !(this->x == v.x && this->y == v.y && this->z == v.z);
 		}
 
+		bool point::operator==( point v ){
+			return this->x == v.x && this->y == v.y && this->z == v.z;
+		}
+
 		std::ostream& operator<<( std::ostream& ostream, point A ){
 			ostream<<std::setprecision(20);
 			ostream<<"("<<A.x<<", "<<A.y<<", "<<A.z<<")";

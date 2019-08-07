@@ -14,7 +14,6 @@ namespace sim{
 		mpf_class T;
 		mpf_class Epsilon;
 		mpf_class Sigma;
-		mpf_class M;
 		math::point box_size;
 		mpf_class dt;
 		int thread_count;
@@ -42,7 +41,7 @@ namespace sim{
 		void update_speed( mpf_class dt );
 		void apply_force( math::vector force );
 	};
-	void init( mpf_class molar_mass, mpf_class temperature, mpf_class dt, int thread_count );
+	bool init( mpf_class molar_mass, mpf_class temperature, mpf_class dt, int thread_count );
 	void read( char* fname );
 	void insert( atom *a );
 	mpf_class calculate_temperature( mpf_class *kinetic_energy = 0 );
@@ -53,5 +52,6 @@ namespace sim{
 	void control_momentum();
 	void step();
 	void dump( char* fname );
+	void dump( FILE *f );
 	void clear();
 }

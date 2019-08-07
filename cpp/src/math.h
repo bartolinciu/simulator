@@ -49,6 +49,7 @@ namespace sim{
 			point& operator+=( vector v );
 			point& operator-=( vector v );
 			bool operator!=( point a );
+			bool operator==( point a );
 		};
 
 		vector operator*( mpf_class alpha, vector v );
